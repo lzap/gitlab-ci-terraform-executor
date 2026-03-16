@@ -143,24 +143,28 @@ section_start install_runner "Installing gitlab-runner"
 # NOTE: libdnf5 5.0.14 returns an error if the cache directory is missing, ignore it.
 $SSH "$(sshUser)@${VM_IP}" sudo dnf clean all || true
 
-# retry install because of a race condition in dnf/subscription-manager
-# which causes git-core to be missing. Retry until gitlab-runner is
-# actually installed
-echo "INFO: Will install gitlab-runner"
-for _LOOP_COUNTER in {0..30}; do
-    set +e
-    $SSH "$(sshUser)@${VM_IP}" sudo dnf install -y \
-        "https://s3.dualstack.us-east-1.amazonaws.com/gitlab-runner-downloads/latest/rpm/gitlab-runner-helper-images.rpm" \
-        "https://s3.dualstack.us-east-1.amazonaws.com/gitlab-runner-downloads/latest/rpm/gitlab-runner_$(runnerArch).rpm" || true
-    set -e
+if $SSH "$(sshUser)@${VM_IP}" "rpm -q gitlab-runner"; then
+    echo "INFO: gitlab-runner is already installed, skipping."
+else
+    # retry install because of a race condition in dnf/subscription-manager
+    # which causes git-core to be missing. Retry until gitlab-runner is
+    # actually installed
+    echo "INFO: Will install gitlab-runner"
+    for _LOOP_COUNTER in {0..30}; do
+	set +e
+	$SSH "$(sshUser)@${VM_IP}" sudo dnf install -y \
+	    "https://s3.dualstack.us-east-1.amazonaws.com/gitlab-runner-downloads/latest/rpm/gitlab-runner-helper-images.rpm" \
+	    "https://s3.dualstack.us-east-1.amazonaws.com/gitlab-runner-downloads/latest/rpm/gitlab-runner_$(runnerArch).rpm" || true
+	set -e
 
-    if $SSH "$(sshUser)@${VM_IP}" "rpm -q gitlab-runner"; then
-        echo "INFO: gitlab-runner has been installed"
-        break
-    fi
-    echo "INFO: retrying ...."
-    sleep 10
-done
+	if $SSH "$(sshUser)@${VM_IP}" "rpm -q gitlab-runner"; then
+	    echo "INFO: gitlab-runner has been installed"
+	    break
+	fi
+	echo "INFO: retrying ...."
+	sleep 10
+    done
+fi
 
 section_end install_runner
 
